@@ -19,7 +19,9 @@ import {
   Loader2, 
   Plus, 
   CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  Locate,
+  X
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { 
@@ -76,11 +78,48 @@ export default function CitizenPortal({
   const [leaderboard, setLeaderboard] = useState([]);
   
   const commentEndRef = useRef(null);
+  
+  const [currentAddress, setCurrentAddress] = useState("Locating address...");
+  const triageMapRef = useRef(null);
+  const mainMapRef = useRef(null);
 
   // Load Google Maps script
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""
   });
+
+  // Geocode current device coordinates
+  useEffect(() => {
+    if (isLoaded && gpsLocation) {
+      const geocoder = new window.google.maps.Geocoder();
+      const latlng = {
+        lat: gpsLocation.latitude,
+        lng: gpsLocation.longitude
+      };
+      geocoder.geocode({ location: latlng }, (results, status) => {
+        if (status === "OK") {
+          if (results[0]) {
+            setCurrentAddress(results[0].formatted_address);
+          } else {
+            setCurrentAddress("Address not found");
+          }
+        } else {
+          setCurrentAddress("Geocoding service unavailable");
+          console.error("Geocoder failed due to: " + status);
+        }
+      });
+    } else if (!gpsLocation) {
+      setCurrentAddress("GPS location unavailable");
+    }
+  }, [isLoaded, gpsLocation]);
+
+  // A helper to wrap a promise with a timeout
+  const withTimeout = (promise, ms, errorMessage) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(errorMessage)), ms))
+    ]);
+  };
 
   // Sync GPS location to map center and triage coordinates
   useEffect(() => {
@@ -143,11 +182,15 @@ export default function CitizenPortal({
     setSubmitError("");
 
     try {
-      // 1. Upload photo to storage
+      // 1. Upload photo to storage with timeout
       const fileName = `issue_${Date.now()}.jpg`;
-      const photoUrl = await uploadIssueImage(capturedImage, fileName);
+      const photoUrl = await withTimeout(
+        uploadIssueImage(capturedImage, fileName),
+        15000,
+        "Photo upload timed out. Make sure Cloud Storage is enabled in the Firebase Console."
+      );
 
-      // 2. Write details document to Firestore
+      // 2. Write details document to Firestore with timeout
       const newReport = {
         category: triageCategory,
         description: triageDescription,
@@ -160,7 +203,11 @@ export default function CitizenPortal({
         creatorId: userId
       };
 
-      await createIssue(newReport);
+      await withTimeout(
+        createIssue(newReport),
+        15000,
+        "Database registration timed out. Make sure Cloud Firestore is enabled in the Firebase Console."
+      );
       
       // 3. Award XP points
       onAddXp(100);
@@ -170,7 +217,7 @@ export default function CitizenPortal({
       setActiveTab("map");
     } catch (err) {
       console.error("Submit report error:", err);
-      setSubmitError("Failed to submit issue. Please check network connection.");
+      setSubmitError(err.message || "Failed to submit issue. Please check network connection.");
     } finally {
       setIsSubmittingReport(false);
     }
@@ -256,9 +303,14 @@ export default function CitizenPortal({
           <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-extrabold text-lg shadow-sm">
             F
           </div>
-          <div>
-            <h1 className="text-base font-extrabold tracking-tight text-zinc-950 dark:text-zinc-50">FixMyCity</h1>
-            <p className="text-[10px] text-zinc-400 font-medium tracking-wide uppercase">Hyperlocal Triage</p>
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-base font-extrabold tracking-tight text-zinc-950 dark:text-zinc-50 leading-tight">FixMyCity</h1>
+            <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold">
+              <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="truncate max-w-[160px] md:max-w-[200px]" title={currentAddress}>
+                {currentAddress}
+              </span>
+            </div>
           </div>
         </div>
         {/* XP level badge */}
@@ -323,22 +375,43 @@ export default function CitizenPortal({
                   </span>
                   <div className="h-44 w-full rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 relative bg-zinc-100 dark:bg-zinc-900">
                     {isLoaded ? (
-                      <GoogleMap
-                        mapContainerStyle={mapContainerStyle}
-                        center={triageCoords}
-                        zoom={16}
-                        options={{
-                          disableDefaultUI: true,
-                          zoomControl: false,
-                          gestureHandling: "cooperative"
-                        }}
-                      >
-                        <Marker 
-                          position={triageCoords} 
-                          draggable={true} 
-                          onDragEnd={handleMarkerDragEnd} 
-                        />
-                      </GoogleMap>
+                      <>
+                        <GoogleMap
+                          mapContainerStyle={mapContainerStyle}
+                          center={triageCoords}
+                          zoom={16}
+                          onLoad={(map) => { triageMapRef.current = map; }}
+                          options={{
+                            disableDefaultUI: true,
+                            zoomControl: false,
+                            gestureHandling: "cooperative"
+                          }}
+                        >
+                          <Marker 
+                            position={triageCoords} 
+                            draggable={true} 
+                            onDragEnd={handleMarkerDragEnd} 
+                          />
+                        </GoogleMap>
+                        
+                        {/* Floating Snap to current location button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (gpsLocation) {
+                              const coords = { lat: gpsLocation.latitude, lng: gpsLocation.longitude };
+                              setTriageCoords(coords);
+                              if (triageMapRef.current) {
+                                triageMapRef.current.panTo(coords);
+                              }
+                            }
+                          }}
+                          className="absolute bottom-3 right-3 p-2 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-md hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-emerald-600 z-10 flex items-center justify-center active:scale-95 cursor-pointer"
+                          title="Snap pin to my current location"
+                        >
+                          <Locate className="w-4 h-4" />
+                        </button>
+                      </>
                     ) : loadError ? (
                       <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
                         <AlertTriangle className="w-8 h-8 text-amber-500 mb-1" />
@@ -441,57 +514,79 @@ export default function CitizenPortal({
         {activeTab === "map" && (
           <div className="w-full h-full relative">
             {isLoaded ? (
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={mapCenter}
-                zoom={14}
-                options={{
-                  disableDefaultUI: true,
-                  zoomControl: false,
-                  styles: [
-                    {
-                      featureType: "poi",
-                      elementType: "labels",
-                      stylers: [{ visibility: "off" }]
-                    }
-                  ]
-                }}
-              >
-                {renderMarkers()}
+              <>
+                <GoogleMap
+                  mapContainerStyle={mapContainerStyle}
+                  center={mapCenter}
+                  zoom={14}
+                  onLoad={(map) => { mainMapRef.current = map; }}
+                  options={{
+                    disableDefaultUI: true,
+                    zoomControl: false,
+                    styles: [
+                      {
+                        featureType: "poi",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                      }
+                    ]
+                  }}
+                >
+                  {renderMarkers()}
 
-                {/* Marker click preview Popup */}
-                {activeMarkerInfo && (
-                  <InfoWindow
-                    position={{ lat: activeMarkerInfo.latitude, lng: activeMarkerInfo.longitude }}
-                    onCloseClick={() => setActiveMarkerInfo(null)}
-                  >
-                    <div className="p-1 max-w-[200px] flex flex-col gap-1.5 text-zinc-900">
-                      <img 
-                        src={activeMarkerInfo.photoUrl} 
-                        alt="Issue Preview" 
-                        className="w-full h-24 object-cover rounded-md" 
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-extrabold uppercase text-emerald-600">
-                          {activeMarkerInfo.status}
-                        </span>
-                        <h4 className="text-xs font-bold truncate">{activeMarkerInfo.category}</h4>
-                        <p className="text-[10px] text-zinc-500 truncate">{activeMarkerInfo.description}</p>
+                  {/* Marker click preview Popup */}
+                  {activeMarkerInfo && (
+                    <InfoWindow
+                      position={{ lat: activeMarkerInfo.latitude, lng: activeMarkerInfo.longitude }}
+                      onCloseClick={() => setActiveMarkerInfo(null)}
+                    >
+                      <div className="p-1 max-w-[200px] flex flex-col gap-1.5 text-zinc-900">
+                        <img 
+                          src={activeMarkerInfo.photoUrl} 
+                          alt="Issue Preview" 
+                          className="w-full h-24 object-cover rounded-md" 
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-extrabold uppercase text-emerald-600">
+                            {activeMarkerInfo.status}
+                          </span>
+                          <h4 className="text-xs font-bold truncate">{activeMarkerInfo.category}</h4>
+                          <p className="text-[10px] text-zinc-500 truncate">{activeMarkerInfo.description}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedIssue(activeMarkerInfo);
+                            setShowDetailPanel(true);
+                            setActiveMarkerInfo(null);
+                          }}
+                          className="mt-1 w-full bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-bold py-1.5 rounded-md text-center"
+                        >
+                          Open Full Details
+                        </button>
                       </div>
-                      <button
-                        onClick={() => {
-                          setSelectedIssue(activeMarkerInfo);
-                          setShowDetailPanel(true);
-                          setActiveMarkerInfo(null);
-                        }}
-                        className="mt-1 w-full bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-bold py-1.5 rounded-md text-center"
-                      >
-                        Open Full Details
-                      </button>
-                    </div>
-                  </InfoWindow>
-                )}
-              </GoogleMap>
+                    </InfoWindow>
+                  )}
+                </GoogleMap>
+                
+                {/* Floating Snap to My Location Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (gpsLocation) {
+                      const coords = { lat: gpsLocation.latitude, lng: gpsLocation.longitude };
+                      setMapCenter(coords);
+                      if (mainMapRef.current) {
+                        mainMapRef.current.panTo(coords);
+                        mainMapRef.current.setZoom(15);
+                      }
+                    }
+                  }}
+                  className="absolute bottom-20 right-4 p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-emerald-600 z-10 flex items-center justify-center active:scale-95 cursor-pointer"
+                  title="Snap map center to my location"
+                >
+                  <Locate className="w-5 h-5" />
+                </button>
+              </>
             ) : loadError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
                 <AlertTriangle className="w-12 h-12 text-amber-500 mb-4 animate-pulse" />
