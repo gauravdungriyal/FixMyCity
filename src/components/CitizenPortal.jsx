@@ -251,7 +251,7 @@ export default function CitizenPortal({
   return (
     <div className="h-full flex flex-col relative bg-zinc-50 dark:bg-[#09090b]">
       {/* Subpage Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0c0c0f] z-10 shadow-xs">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0c0c0f] z-10 shadow-xs safe-top-padding">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-extrabold text-lg shadow-sm">
             F

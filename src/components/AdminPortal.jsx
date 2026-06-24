@@ -148,7 +148,7 @@ export default function AdminPortal({
   return (
     <div className="h-full flex flex-col bg-zinc-950 text-zinc-100 select-none overflow-hidden relative">
       {/* Admin Header */}
-      <div className="px-5 py-4 border-b border-zinc-800 bg-[#0c0c0f] z-10 shadow-md flex justify-between items-center">
+      <div className="px-5 py-4 border-b border-zinc-800 bg-[#0c0c0f] z-10 shadow-md flex justify-between items-center safe-top-padding">
         <div>
           <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 bg-yellow-500 rounded-full animate-pulse"></span>

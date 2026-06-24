@@ -78,12 +78,29 @@
   border: 1px solid rgba(39, 39, 42, 0.4);
 }
 
+.mock-phone-container {
+  width: 100%;
+  height: 100vh;
+  height: var(--app-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mock-phone-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Responsive Desktop Phone Frame */
 @media (min-width: 640px) {
   .mock-phone-container {
     background-color: #121214;
     background-image: radial-gradient(circle at 50% 0%, #1e1e24 0%, #0c0c0f 100%);
-    display: flex;
     justify-content: center;
     align-items: center;
     width: 100vw;
@@ -91,13 +108,11 @@
   }
 
   .mock-phone-frame {
-    position: relative;
     width: 410px;
     height: 840px;
     border: 12px solid #27272a;
     border-radius: 40px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px #3f3f46;
-    overflow: hidden;
     background: #ffffff;
   }
   
@@ -132,7 +147,11 @@
   background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.4) 100%);
 }
 
-/* Helper for visual grid centering */
+/* Helper for visual grid centering and safe areas */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-top-padding {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1rem) !important;
 }
