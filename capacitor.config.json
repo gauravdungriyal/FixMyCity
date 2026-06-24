@@ -1,0 +1,9 @@
+{
+  "appId": "com.fixmycity.app",
+  "appName": "FixMyCity",
+  "webDir": "dist",
+  "server": {
+    "url": "https://fixmycity-500403.web.app",
+    "cleartext": true
+  }
+}

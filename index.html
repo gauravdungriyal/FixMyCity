@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2316a34a'%3E%3Cpath d='M12 2L2 22h20L12 2zm0 3.99L18.47 19H5.53L12 5.99zM11 16h2v2h-2v-2zm0-6h2v4h-2v-4z'/%3E%3C/svg%3E" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#16a34a" />
+    <title>FixMyCity - Civic Triage</title>
+    <!-- Google Fonts: DM Sans and JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/manifest.json" />
+    <script>
+      // Prevent Google Maps from displaying blocking native alert dialogs on invalid API keys during testing
+      window.alert = function(msg) {
+        console.warn("Blocked native window.alert:", msg);
+      };
+    </script>
+  </head>
+  <body class="bg-zinc-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-50 font-sans antialiased overflow-hidden select-none">
+    <div id="root" class="h-screen w-screen overflow-hidden"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --app-height: 100%;
+  }
+  
+  html, body {
+    height: 100vh;
+    height: var(--app-height);
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    touch-action: manipulation;
+  }
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #27272a;
+}
+
+/* Custom Animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Custom UI Classes */
+.glassmorphism {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(228, 228, 231, 0.6);
+}
+
+.dark .glassmorphism {
+  background: rgba(12, 12, 15, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(39, 39, 42, 0.4);
+}
+
+/* Responsive Desktop Phone Frame */
+@media (min-width: 640px) {
+  .mock-phone-container {
+    background-color: #121214;
+    background-image: radial-gradient(circle at 50% 0%, #1e1e24 0%, #0c0c0f 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .mock-phone-frame {
+    position: relative;
+    width: 410px;
+    height: 840px;
+    border: 12px solid #27272a;
+    border-radius: 40px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px #3f3f46;
+    overflow: hidden;
+    background: #ffffff;
+  }
+  
+  .dark .mock-phone-frame {
+    background: #09090b;
+    border-color: #1e1e24;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9), 0 0 0 1px #27272a;
+  }
+
+  /* Mock Speaker / Notch */
+  .mock-phone-frame::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 150px;
+    height: 25px;
+    background: #27272a;
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
+    z-index: 50;
+  }
+  
+  .dark .mock-phone-frame::before {
+    background: #1e1e24;
+  }
+}
+
+/* WebRTC Camera overlays */
+.camera-overlay {
+  background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.4) 100%);
+}
+
+/* Helper for visual grid centering */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

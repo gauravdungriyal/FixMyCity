@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FixMyCity</string>
+    <string name="title_activity_main">FixMyCity</string>
+    <string name="package_name">com.fixmycity.app</string>
+    <string name="custom_url_scheme">com.fixmycity.app</string>
+</resources>
