@@ -128,7 +128,7 @@ export default function CameraCapture({ onCapture, onClose }) {
   return (
     <div className="absolute inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100 select-none animate-fade-in overflow-hidden safe-bottom">
       {/* Upper navigation bar */}
-      <div className="flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800 z-10">
+      <div className="flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800 z-10 safe-top-padding">
         <h3 className="text-sm font-semibold tracking-tight uppercase text-zinc-300">
           {capturedImage ? "Verify Triage Photo" : "Live Camera Capture"}
         </h3>
