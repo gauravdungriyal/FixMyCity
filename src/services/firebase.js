@@ -10,11 +10,12 @@ import {
   orderBy, 
   arrayUnion, 
   increment,
+  getDoc,
   setDoc,
   limit
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { getAuth } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 
 // Dynamic configuration check
 const firebaseConfig = {
@@ -215,4 +216,31 @@ export const subscribeToLeaderboard = (onUpdate, onError) => {
     console.error("Leaderboard subscription error:", error);
     if (onError) onError(error);
   });
+};
+
+/**
+ * Logs in municipal officers using Email and Password
+ */
+export const loginWithEmailAndPassword = async (email, password) => {
+  if (!firebaseInitialized) throw new Error("Firebase not initialized");
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  return userCredential.user;
+};
+
+/**
+ * Retrieves user profile data from Firestore
+ */
+export const getUserProfile = async (userId) => {
+  if (!firebaseInitialized) return null;
+  try {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      return userSnap.data();
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    return null;
+  }
 };

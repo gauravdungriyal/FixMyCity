@@ -3,7 +3,8 @@ import {
   subscribeToIssues, 
   firebaseInitialized,
   auth,
-  syncUserProfile
+  syncUserProfile,
+  getUserProfile
 } from "./services/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { triageCivicImage, isGeminiConfigured } from "./services/gemini";
@@ -52,32 +53,8 @@ export default function App() {
     import.meta.env.VITE_FIREBASE_API_KEY && 
     import.meta.env.VITE_FIREBASE_PROJECT_ID;
 
-  // Initialize client profile and fetch geolocation on boot
+  // Fetch geolocation on boot
   useEffect(() => {
-    // 1. Manage user profile storage
-    let storedId = localStorage.getItem("fix_my_city_user_id");
-    let storedProfile = localStorage.getItem("fix_my_city_profile");
-    
-    if (!storedId) {
-      storedId = `usr_${Math.random().toString(36).substring(2, 11)}`;
-      localStorage.setItem("fix_my_city_user_id", storedId);
-    }
-    setUserId(storedId);
-
-    if (storedProfile) {
-      setUserProfile(JSON.parse(storedProfile));
-    } else {
-      const defaultProfile = {
-        name: `Citizen #${Math.floor(1000 + Math.random() * 9000)}`,
-        email: "citizen@fixmycity.org",
-        xp: 0,
-        level: 1
-      };
-      setUserProfile(defaultProfile);
-      localStorage.setItem("fix_my_city_profile", JSON.stringify(defaultProfile));
-    }
-
-    // 2. Fetch coordinates
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -95,25 +72,76 @@ export default function App() {
   // Listen for user Authentication state changes
   useEffect(() => {
     if (firebaseInitialized && auth) {
-      const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         setUser(firebaseUser);
-        setLoadingAuth(false);
         if (firebaseUser) {
-          // Format phone number to clean up display name if unset
-          const cleanPhone = firebaseUser.phoneNumber || "";
-          setUserProfile((prev) => {
-            const updated = {
-              ...prev,
-              name: prev.name.startsWith("Citizen #") 
-                ? `Citizen (${cleanPhone.slice(-4) || "Verified"})` 
-                : prev.name,
-              email: firebaseUser.email || `${firebaseUser.uid.slice(0, 8)}@fixmycity.org`
-            };
-            localStorage.setItem("fix_my_city_profile", JSON.stringify(updated));
-            return updated;
+          const uid = firebaseUser.uid;
+          setUserId(uid);
+
+          if (firebaseUser.email) {
+            // It's an officer login (email auth). Route directly to the admin dashboard.
+            window.location.hash = "#/admin";
+            setCurrentPath("/admin");
+          } else {
+            // Citizen phone OTP flow.
+            // 1. Try to load from localStorage cache first to avoid layout shift
+            const cachedProfile = localStorage.getItem(`fix_my_city_profile_${uid}`);
+            if (cachedProfile) {
+              setUserProfile(JSON.parse(cachedProfile));
+            } else {
+              // Fallback to legacy non-uid profile if it exists (for seamless migration)
+              const legacyProfile = localStorage.getItem("fix_my_city_profile");
+              if (legacyProfile) {
+                const parsed = JSON.parse(legacyProfile);
+                setUserProfile(parsed);
+                localStorage.setItem(`fix_my_city_profile_${uid}`, legacyProfile);
+                localStorage.removeItem("fix_my_city_profile");
+              }
+            }
+
+            // 2. Fetch fresh profile from Firestore
+            try {
+              const freshProfile = await getUserProfile(uid);
+              if (freshProfile) {
+                setUserProfile(freshProfile);
+                localStorage.setItem(`fix_my_city_profile_${uid}`, JSON.stringify(freshProfile));
+              } else {
+                // No profile in Firestore yet. Create a default one.
+                const cleanPhone = firebaseUser.phoneNumber || "";
+                const defaultName = `Citizen (${cleanPhone.slice(-4) || "Verified"})`;
+                
+                setUserProfile((currentVal) => {
+                  let nameToUse = currentVal.name;
+                  if (!nameToUse || nameToUse === "Loading Profile..." || nameToUse === "City Protector" || nameToUse.startsWith("Citizen #")) {
+                    nameToUse = defaultName;
+                  }
+                  
+                  const defaultProfile = {
+                    name: nameToUse,
+                    email: firebaseUser.email || `${uid.slice(0, 8)}@fixmycity.org`,
+                    xp: currentVal.xp || 0,
+                    level: currentVal.level || 1
+                  };
+                  
+                  localStorage.setItem(`fix_my_city_profile_${uid}`, JSON.stringify(defaultProfile));
+                  syncUserProfile(uid, defaultProfile).catch(e => console.error("Firestore initial sync failed:", e));
+                  return defaultProfile;
+                });
+              }
+            } catch (err) {
+              console.error("Error loading user profile:", err);
+            }
+          }
+        } else {
+          setUserId("");
+          setUserProfile({
+            name: "City Protector",
+            email: "citizen@fixmycity.org",
+            xp: 0,
+            level: 1
           });
-          setUserId(firebaseUser.uid);
         }
+        setLoadingAuth(false);
       });
       return () => unsubscribe();
     } else {
@@ -133,12 +161,12 @@ export default function App() {
 
   // Sync profile to Firestore
   useEffect(() => {
-    if (userId && userProfile && firebaseInitialized) {
+    if (userId && user && user.uid === userId && !user.email && firebaseInitialized) {
       syncUserProfile(userId, userProfile).catch((err) => {
         console.error("Failed to sync user profile to Firestore:", err);
       });
     }
-  }, [userId, userProfile]);
+  }, [userId, userProfile, user]);
 
   // Simple client-side Router logic
   useEffect(() => {
@@ -181,7 +209,23 @@ export default function App() {
         level: newLevel
       };
       
-      localStorage.setItem("fix_my_city_profile", JSON.stringify(updated));
+      if (userId) {
+        localStorage.setItem(`fix_my_city_profile_${userId}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  // Update Profile details helper
+  const handleUpdateProfile = (newData) => {
+    setUserProfile((prev) => {
+      const updated = {
+        ...prev,
+        ...newData
+      };
+      if (userId) {
+        localStorage.setItem(`fix_my_city_profile_${userId}`, JSON.stringify(updated));
+      }
       return updated;
     });
   };
@@ -231,7 +275,14 @@ export default function App() {
   };
 
   // Redirect admin back to citizen hub
-  const handleAdminExit = () => {
+  const handleAdminExit = async () => {
+    if (firebaseInitialized && auth) {
+      try {
+        await signOut(auth);
+      } catch (err) {
+        console.error("Sign out failed:", err);
+      }
+    }
     window.location.hash = "#/";
     setCurrentPath("/");
   };
@@ -316,6 +367,7 @@ export default function App() {
         onResetTriage={handleResetTriage}
         userId={userId}
         userProfile={userProfile}
+        onUpdateProfile={handleUpdateProfile}
         onAddXp={handleAddXp}
         onSignOut={handleSignOut}
       />

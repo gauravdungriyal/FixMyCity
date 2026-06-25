@@ -21,7 +21,9 @@ import {
   CheckCircle2, 
   AlertCircle,
   Locate,
-  X
+  X,
+  Pencil,
+  Check
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { 
@@ -107,6 +109,7 @@ export default function CitizenPortal({
   onResetTriage,
   userId,
   userProfile,
+  onUpdateProfile,
   onAddXp,
   onSignOut
 }) {
@@ -128,8 +131,37 @@ export default function CitizenPortal({
   const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [activeMarkerInfo, setActiveMarkerInfo] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+
+  useEffect(() => {
+    if (userProfile && userProfile.name) {
+      setEditNameValue(userProfile.name);
+    }
+  }, [userProfile]);
   
   const commentEndRef = useRef(null);
+  const navRef = useRef(null);
+  const [navWidth, setNavWidth] = useState(378);
+
+  useEffect(() => {
+    if (!navRef.current) return;
+    const handleResize = () => {
+      if (navRef.current) {
+        setNavWidth(navRef.current.offsetWidth);
+      }
+    };
+    handleResize();
+    // Use both ResizeObserver and window event for robust updates
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(navRef.current);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+  
   
   const [currentAddress, setCurrentAddress] = useState("Locating address...");
   const triageMapRef = useRef(null);
@@ -634,7 +666,8 @@ export default function CitizenPortal({
                       }
                     }
                   }}
-                  className="absolute bottom-20 right-4 p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-emerald-600 z-10 flex items-center justify-center active:scale-95 cursor-pointer"
+                  className="absolute right-4 p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-emerald-600 z-10 flex items-center justify-center active:scale-95 cursor-pointer"
+                  style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom, 0px))" }}
                   title="Snap map center to my location"
                 >
                   <Locate className="w-5 h-5" />
@@ -697,7 +730,10 @@ export default function CitizenPortal({
           }
 
           return (
-            <div className="w-full h-full overflow-y-auto px-4 py-4 flex flex-col gap-3">
+            <div 
+              className="w-full h-full overflow-y-auto px-4 pt-4 flex flex-col gap-3"
+              style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom, 0px))" }}
+            >
               {/* Segmented feed filters toggle */}
               <div className="flex bg-zinc-200/50 dark:bg-zinc-900/60 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 shrink-0 mb-1">
                 {[
@@ -795,7 +831,10 @@ export default function CitizenPortal({
 
         {/* Tab 3: Leaderboard */}
         {activeTab === "leaderboard" && (
-          <div className="w-full h-full overflow-y-auto px-4 py-4 flex flex-col gap-4">
+          <div 
+            className="w-full h-full overflow-y-auto px-4 pt-4 flex flex-col gap-4"
+            style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom, 0px))" }}
+          >
             <div className="bg-emerald-600 text-white rounded-2xl p-5 shadow-md flex flex-col gap-2 relative overflow-hidden">
               <div className="absolute right-[-10px] bottom-[-20px] opacity-10">
                 <Trophy className="w-40 h-40" />
@@ -864,14 +903,71 @@ export default function CitizenPortal({
 
         {/* Tab 4: Profile Tab */}
         {activeTab === "profile" && (
-          <div className="w-full h-full overflow-y-auto px-4 py-4 flex flex-col gap-5">
+          <div 
+            className="w-full h-full overflow-y-auto px-4 pt-4 flex flex-col gap-5"
+            style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom, 0px))" }}
+          >
             {/* Avatar header card */}
             <div className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 flex flex-col items-center text-center shadow-xs">
               <div className="w-16 h-16 rounded-full bg-emerald-600 text-white text-3xl font-extrabold flex items-center justify-center mb-3">
                 {userProfile.name ? userProfile.name[0] : "C"}
               </div>
-              <h3 className="font-extrabold text-base">{userProfile.name}</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">{userProfile.email}</p>
+              
+              {isEditingName ? (
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (editNameValue.trim()) {
+                      onUpdateProfile({ name: editNameValue.trim() });
+                    }
+                    setIsEditingName(false);
+                  }}
+                  className="flex items-center gap-2 mt-1 w-full max-w-[200px]"
+                >
+                  <input
+                    type="text"
+                    value={editNameValue}
+                    onChange={(e) => setEditNameValue(e.target.value)}
+                    className="flex-1 bg-zinc-150 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs font-bold text-center text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-emerald-500"
+                    maxLength={20}
+                    autoFocus
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors shrink-0 animate-scale-in"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditNameValue(userProfile.name || "");
+                      setIsEditingName(false);
+                    }}
+                    className="p-1.5 bg-zinc-200 dark:bg-zinc-850 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-650 dark:text-zinc-400 rounded-lg transition-colors shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center gap-1.5 group mt-1">
+                  <h3 className="font-extrabold text-base text-zinc-900 dark:text-zinc-50">{userProfile.name}</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditNameValue(userProfile.name || "");
+                      setIsEditingName(true);
+                    }}
+                    className="p-1 text-zinc-400 hover:text-emerald-500 dark:hover:text-emerald-400 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all"
+                    title="Edit Name"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+              
+              <p className="text-xs text-zinc-400 mt-1">{userProfile.email}</p>
 
               {/* Progress metrics */}
               <div className="grid grid-cols-3 gap-2 w-full border-t border-zinc-100 dark:border-zinc-900 mt-5 pt-4">
@@ -1263,56 +1359,106 @@ export default function CitizenPortal({
       {/* Floating Center '+' Camera Trigger Button */}
       <button 
         onClick={onTriggerCamera}
-        className="absolute bottom-16 left-1/2 transform -translate-x-1/2 z-20 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-emerald-600/20 hover:shadow-xl transition-all border-4 border-zinc-50 dark:border-[#09090b]"
+        className="absolute left-1/2 transform -translate-x-1/2 z-30 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-emerald-600/20 hover:shadow-xl transition-all border-4 border-white dark:border-[#0c0c0f]"
+        style={{ bottom: "calc(3.25rem + env(safe-area-inset-bottom, 0px))" }}
       >
         <Plus className="w-7 h-7" />
       </button>
 
-      {/* Bottom Navigation Tab Bar */}
-      <div className="h-16 bg-white dark:bg-[#0c0c0f] border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-around px-2 z-10 safe-bottom">
-        <button 
-          onClick={() => setActiveTab("map")}
-          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
-            activeTab === "map" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          <MapPin className="w-5 h-5" />
-          <span className="text-[9px] font-bold">Map</span>
-        </button>
+      {/* Floating Bottom Navigation Tab Bar with SVG notch shape */}
+      {(() => {
+        const r = 20; // Outer rounded corner radius
+        const s = 40; // Notch half-width
+        const f = 12; // Curve transition width
+        const d_depth = 28; // Notch depth
+        const C_1 = navWidth / 2;
+        const H = 64;
+        const W = navWidth;
 
-        <button 
-          onClick={() => setActiveTab("feed")}
-          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
-            activeTab === "feed" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          <List className="w-5 h-5" />
-          <span className="text-[9px] font-bold">Feed</span>
-        </button>
+        const pathD = `
+          M 0, ${r}
+          A ${r}, ${r} 0 0 1 ${r}, 0
+          L ${C_1 - s}, 0
+          C ${C_1 - s + f}, 0 ${C_1 - s + f}, ${d_depth} ${C_1 - s + 2*f}, ${d_depth}
+          L ${C_1 + s - 2*f}, ${d_depth}
+          C ${C_1 + s - f}, ${d_depth} ${C_1 + s - f}, 0 ${C_1 + s}, 0
+          L ${W - r}, 0
+          A ${r}, ${r} 0 0 1 ${W}, ${r}
+          L ${W}, ${H - r}
+          A ${r}, ${r} 0 0 1 ${W - r}, ${H}
+          L ${r}, ${H}
+          A ${r}, ${r} 0 0 1 0, ${H - r}
+          Z
+        `;
 
-        {/* Dummy spacer for central floating camera key */}
-        <div className="w-10"></div>
+        return (
+          <div 
+            ref={navRef}
+            className="absolute left-4 right-4 h-16 z-20 pointer-events-none"
+            style={{ bottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}
+          >
+            {/* SVG shape background */}
+            <svg 
+              className="absolute inset-0 w-full h-full drop-shadow-[0_4px_16px_rgba(0,0,0,0.08)] dark:drop-shadow-[0_4px_16px_rgba(0,0,0,0.3)] pointer-events-none"
+              viewBox={`0 0 ${navWidth} 64`}
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path 
+                d={pathD} 
+                className="fill-white dark:fill-[#0c0c0f] stroke-zinc-200 dark:stroke-zinc-800 pointer-events-auto" 
+                strokeWidth="1"
+              />
+            </svg>
 
-        <button 
-          onClick={() => setActiveTab("leaderboard")}
-          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
-            activeTab === "leaderboard" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          <Trophy className="w-5 h-5" />
-          <span className="text-[9px] font-bold">Leaderboard</span>
-        </button>
+            {/* Buttons Overlay */}
+            <div className="absolute inset-0 flex items-center justify-around px-2 pointer-events-auto">
+              <button 
+                onClick={() => setActiveTab("map")}
+                className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
+                  activeTab === "map" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <MapPin className="w-5 h-5" />
+                <span className="text-[9px] font-bold">Map</span>
+              </button>
 
-        <button 
-          onClick={() => setActiveTab("profile")}
-          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
-            activeTab === "profile" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
-          }`}
-        >
-          <User className="w-5 h-5" />
-          <span className="text-[9px] font-bold">Profile</span>
-        </button>
-      </div>
+              <button 
+                onClick={() => setActiveTab("feed")}
+                className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
+                  activeTab === "feed" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <List className="w-5 h-5" />
+                <span className="text-[9px] font-bold">Feed</span>
+              </button>
+
+              {/* Dummy spacer for central floating camera key */}
+              <div className="w-10"></div>
+
+              <button 
+                onClick={() => setActiveTab("leaderboard")}
+                className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
+                  activeTab === "leaderboard" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Trophy className="w-5 h-5" />
+                <span className="text-[9px] font-bold">Leaderboard</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab("profile")}
+                className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
+                  activeTab === "profile" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <User className="w-5 h-5" />
+                <span className="text-[9px] font-bold">Profile</span>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
