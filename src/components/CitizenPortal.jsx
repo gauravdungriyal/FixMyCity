@@ -46,6 +46,57 @@ const defaultCenter = {
   lng: 77.2090
 };
 
+// Safe date formatting utility to prevent RangeError crashes
+const safeFormatDistanceToNow = (dateVal) => {
+  if (!dateVal) return "unknown time";
+  try {
+    let dateObj;
+    if (typeof dateVal.toDate === "function") {
+      dateObj = dateVal.toDate();
+    } else if (dateVal instanceof Date) {
+      dateObj = dateVal;
+    } else if (typeof dateVal === "number") {
+      dateObj = new Date(dateVal);
+    } else if (typeof dateVal === "string") {
+      if (/^\d+$/.test(dateVal)) {
+        dateObj = new Date(parseInt(dateVal, 10));
+      } else {
+        dateObj = new Date(dateVal);
+      }
+    } else if (dateVal.seconds) {
+      dateObj = new Date(dateVal.seconds * 1000);
+    } else {
+      dateObj = new Date(dateVal);
+    }
+    
+    if (isNaN(dateObj.getTime())) {
+      return "some time ago";
+    }
+    
+    return formatDistanceToNow(dateObj, { addSuffix: true });
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return "some time ago";
+  }
+};
+
+// Haversine distance formula to calculate distance between two coordinates in kilometers
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) return null;
+  if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+  const R = 6371; // Radius of the Earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+};
+
 export default function CitizenPortal({ 
   issues, 
   gpsLocation, 
@@ -63,6 +114,7 @@ export default function CitizenPortal({
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [newCommentText, setNewCommentText] = useState("");
+  const [feedFilter, setFeedFilter] = useState("all"); // all, mine, near
   
   // Triage report form state
   const [triageCategory, setTriageCategory] = useState("");
@@ -82,6 +134,7 @@ export default function CitizenPortal({
   const [currentAddress, setCurrentAddress] = useState("Locating address...");
   const triageMapRef = useRef(null);
   const mainMapRef = useRef(null);
+  const drawerMapRef = useRef(null);
 
   // Load Google Maps script
   const { isLoaded, loadError } = useJsApiLoader({
@@ -614,64 +667,131 @@ export default function CitizenPortal({
         )}
 
         {/* Tab 2: Activity List Feed */}
-        {activeTab === "feed" && (
-          <div className="w-full h-full overflow-y-auto px-4 py-4 flex flex-col gap-3">
-            {issues.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-70">
-                <MapPin className="w-10 h-10 text-zinc-400 mb-2" />
-                <span className="text-sm font-semibold text-zinc-500">No issues reported yet.</span>
+        {activeTab === "feed" && (() => {
+          // Pre-calculate distances for each issue if gpsLocation is available
+          const processedIssues = issues.map(issue => {
+            let dist = null;
+            if (gpsLocation && issue.latitude && issue.longitude) {
+              dist = calculateDistance(
+                gpsLocation.latitude,
+                gpsLocation.longitude,
+                issue.latitude,
+                issue.longitude
+              );
+            }
+            return { ...issue, distance: dist };
+          });
+
+          // Filter according to feedFilter
+          const displayedIssues = processedIssues.filter(issue => {
+            if (feedFilter === "mine") return issue.creatorId === userId;
+            if (feedFilter === "near") {
+              return issue.distance !== null && issue.distance <= 5;
+            }
+            return true;
+          });
+
+          // Sort by distance when filtering by Near Me
+          if (feedFilter === "near") {
+            displayedIssues.sort((a, b) => (a.distance || 9999) - (b.distance || 9999));
+          }
+
+          return (
+            <div className="w-full h-full overflow-y-auto px-4 py-4 flex flex-col gap-3">
+              {/* Segmented feed filters toggle */}
+              <div className="flex bg-zinc-200/50 dark:bg-zinc-900/60 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 shrink-0 mb-1">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "mine", label: "My Reports" },
+                  { id: "near", label: "Near Me" }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setFeedFilter(tab.id)}
+                    className={`flex-1 text-center py-2 text-[11px] font-extrabold rounded-xl transition-all ${
+                      feedFilter === tab.id
+                        ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 shadow-xs border border-zinc-200/50 dark:border-zinc-700/50"
+                        : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              issues.map((issue) => (
-                <div 
-                  key={issue.id}
-                  onClick={() => {
-                    setSelectedIssue(issue);
-                    setShowDetailPanel(true);
-                  }}
-                  className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden p-3.5 flex gap-3 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all active:scale-98 cursor-pointer shadow-xs"
-                >
-                  <img 
-                    src={issue.photoUrl} 
-                    alt={issue.category} 
-                    className="w-20 h-20 rounded-xl object-cover shrink-0 border border-zinc-100 dark:border-zinc-900" 
-                  />
-                  <div className="flex-1 flex flex-col justify-between min-w-0">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                          issue.status === "Resolved" 
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                            : issue.status === "In Progress"
-                            ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                            : "bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400"
-                        }`}>
-                          {issue.status}
-                        </span>
-                        <span className="text-[10px] text-zinc-400 font-medium">
-                          {formatDistanceToNow(issue.createdAt, { addSuffix: true })}
-                        </span>
+
+              {displayedIssues.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-70">
+                  <MapPin className="w-10 h-10 text-zinc-400 mb-2" />
+                  <span className="text-xs font-semibold text-zinc-500">
+                    {feedFilter === "mine" 
+                      ? "You haven't reported any issues yet." 
+                      : feedFilter === "near" 
+                      ? "No reports found within 5 km." 
+                      : "No issues reported yet."}
+                  </span>
+                </div>
+              ) : (
+                displayedIssues.map((issue) => (
+                  <div 
+                    key={issue.id}
+                    onClick={() => {
+                      setSelectedIssue(issue);
+                      setShowDetailPanel(true);
+                    }}
+                    className="bg-white dark:bg-[#0c0c0f] border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden p-3.5 flex gap-3 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all active:scale-98 cursor-pointer shadow-xs animate-fade-in"
+                  >
+                    <img 
+                      src={issue.photoUrl} 
+                      alt={issue.category} 
+                      className="w-20 h-20 rounded-xl object-cover shrink-0 border border-zinc-100 dark:border-zinc-900" 
+                    />
+                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            issue.status === "Resolved" 
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                              : issue.status === "In Progress"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                              : "bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400"
+                          }`}>
+                            {issue.status}
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-medium">
+                            {safeFormatDistanceToNow(issue.createdAt)}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-bold truncate text-zinc-900 dark:text-zinc-50">{issue.category}</h4>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{issue.description}</p>
                       </div>
-                      <h4 className="text-xs font-bold truncate text-zinc-900 dark:text-zinc-50">{issue.category}</h4>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{issue.description}</p>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 text-[10px] text-zinc-400 font-bold mt-1">
-                      <span className="flex items-center gap-1">
-                        <ThumbsUp className="w-3 h-3 text-emerald-500" />
-                        {issue.verificationsCount || 0} Verifications
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3 text-blue-500" />
-                        {issue.comments?.length || 0} Comments
-                      </span>
+                      
+                      <div className="flex items-center justify-between text-[10px] text-zinc-400 font-bold mt-1">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <ThumbsUp className="w-3 h-3 text-emerald-500" />
+                            {issue.verificationsCount || 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="w-3 h-3 text-blue-500" />
+                            {issue.comments?.length || 0}
+                          </span>
+                        </div>
+                        {issue.distance !== null && (
+                          <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1 shadow-2xs">
+                            <MapPin className="w-2.5 h-2.5" />
+                            {issue.distance < 1 
+                              ? `${Math.round(issue.distance * 1000)}m away` 
+                              : `${issue.distance.toFixed(1)} km away`}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
+                ))
+              )}
+            </div>
+          );
+        })()}
 
         {/* Tab 3: Leaderboard */}
         {activeTab === "leaderboard" && (
@@ -861,7 +981,7 @@ export default function CitizenPortal({
                   {selectedIssue.category}
                 </h3>
                 <p className="text-[10px] text-zinc-400 font-medium mt-0.5">
-                  Reported {formatDistanceToNow(selectedIssue.createdAt, { addSuffix: true })} by {selectedIssue.createdBy}
+                  Reported {safeFormatDistanceToNow(selectedIssue.createdAt)} by {selectedIssue.createdBy}
                 </p>
               </div>
 
@@ -880,6 +1000,163 @@ export default function CitizenPortal({
                     <span className="text-[8px] text-zinc-400">{s.desc}</span>
                   </div>
                 ))}
+              </div>
+
+              {/* Proximity / Distance Info */}
+              {(() => {
+                let dist = null;
+                if (gpsLocation && selectedIssue.latitude && selectedIssue.longitude) {
+                  dist = calculateDistance(
+                    gpsLocation.latitude,
+                    gpsLocation.longitude,
+                    selectedIssue.latitude,
+                    selectedIssue.longitude
+                  );
+                }
+                if (dist === null) return null;
+                return (
+                  <div className="flex items-center gap-2 bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-200/50 dark:border-emerald-800/30 px-3.5 py-3 rounded-2xl text-[11px] font-bold">
+                    <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-zinc-700 dark:text-zinc-300">
+                      Located <strong className="text-zinc-950 dark:text-zinc-50">{dist < 1 ? `${Math.round(dist * 1000)} meters` : `${dist.toFixed(2)} km`}</strong> from you.
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Mini Interactive Google Map */}
+              {selectedIssue.latitude && selectedIssue.longitude && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    Pinpoint Map Location
+                  </span>
+                  <div className="h-44 w-full rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 relative bg-zinc-100 dark:bg-zinc-900 shadow-inner">
+                    {isLoaded ? (
+                      <>
+                        <GoogleMap
+                          mapContainerStyle={mapContainerStyle}
+                          center={{ lat: selectedIssue.latitude, lng: selectedIssue.longitude }}
+                          zoom={16}
+                          onLoad={(map) => { drawerMapRef.current = map; }}
+                          options={{
+                            disableDefaultUI: true,
+                            zoomControl: false,
+                            gestureHandling: "cooperative"
+                          }}
+                        >
+                          <Marker 
+                            position={{ lat: selectedIssue.latitude, lng: selectedIssue.longitude }}
+                            icon={getMarkerIcon(selectedIssue.status)}
+                          />
+                          {gpsLocation && (
+                            <Marker
+                              position={{ lat: gpsLocation.latitude, lng: gpsLocation.longitude }}
+                              icon={{
+                                path: window.google.maps.SymbolPath.CIRCLE,
+                                scale: 6,
+                                fillColor: "#3B82F6",
+                                fillOpacity: 1,
+                                strokeColor: "#FFFFFF",
+                                strokeWeight: 2,
+                              }}
+                              title="Your Location"
+                            />
+                          )}
+                        </GoogleMap>
+
+                        {/* Floating Buttons on Map */}
+                        <div className="absolute bottom-3 right-3 flex flex-col gap-2 z-10">
+                          {/* Get Directions Button */}
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${selectedIssue.latitude},${selectedIssue.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-white shadow-md transition-all flex items-center justify-center hover:scale-105 active:scale-95 cursor-pointer"
+                            title="Get Directions in Google Maps"
+                          >
+                            <ChevronRight className="w-4 h-4 rotate-[-45deg]" />
+                          </a>
+
+                          {/* Snap to user location */}
+                          {gpsLocation && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (drawerMapRef.current) {
+                                  drawerMapRef.current.panTo({ lat: gpsLocation.latitude, lng: gpsLocation.longitude });
+                                  drawerMapRef.current.setZoom(16);
+                                }
+                              }}
+                              className="p-2 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-md text-emerald-600 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all flex items-center justify-center hover:scale-105 active:scale-95"
+                              title="Center on my location"
+                            >
+                              <Locate className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {/* Snap back to issue location */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (drawerMapRef.current) {
+                                drawerMapRef.current.panTo({ lat: selectedIssue.latitude, lng: selectedIssue.longitude });
+                                drawerMapRef.current.setZoom(16);
+                              }
+                            }}
+                            className="p-2 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-md text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all flex items-center justify-center hover:scale-105 active:scale-95"
+                            title="Center on issue"
+                          >
+                            <MapPin className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </>
+                    ) : loadError ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
+                        <AlertTriangle className="w-8 h-8 text-amber-500 mb-1" />
+                        <span className="text-xs text-zinc-500">Maps failed to load</span>
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Gemini AI Triage Insights */}
+              <div className="bg-emerald-50/20 dark:bg-emerald-950/10 border border-emerald-500/20 p-3.5 rounded-2xl flex flex-col gap-2 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    Gemini AI Triage Report
+                  </span>
+                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
+                    selectedIssue.urgency === "High"
+                      ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
+                      : selectedIssue.urgency === "Medium"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                  }`}>
+                    {selectedIssue.urgency || "Medium"} Urgency
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-300">
+                  <div>
+                    <span className="font-bold text-zinc-800 dark:text-zinc-200">Suggested Dept: </span>
+                    {(() => {
+                      const cat = selectedIssue.category || "";
+                      if (cat.includes("Pothole") || cat.includes("Road")) return "Public Works Dept (Roads)";
+                      if (cat.includes("Garbage") || cat.includes("Trash")) return "Municipal Solid Waste Management";
+                      if (cat.includes("Water") || cat.includes("Leak") || cat.includes("Sewer")) return "Water & Sanitation Division";
+                      if (cat.includes("Streetlight") || cat.includes("Electricity")) return "Electrical & Grid Division";
+                      if (cat.includes("Toilet")) return "Public Health & Hygiene Dept";
+                      return "Local Municipal Council (Field Ops)";
+                    })()}
+                  </div>
+                  <div className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 italic">
+                    AI Auto-Categorized to optimize dispatch speed. Pinned location coordinates sent to field team.
+                  </div>
+                </div>
               </div>
 
               {/* Double Photo comparison (Before vs After) */}
@@ -949,7 +1226,7 @@ export default function CitizenPortal({
                         <div className="flex items-center justify-between mb-0.5">
                           <span className="text-[10px] font-bold text-zinc-800 dark:text-zinc-200">{comment.userName}</span>
                           <span className="text-[8px] text-zinc-400">
-                            {formatDistanceToNow(comment.createdAt, { addSuffix: true })}
+                            {safeFormatDistanceToNow(comment.createdAt)}
                           </span>
                         </div>
                         <p className="text-[11px] text-zinc-600 dark:text-zinc-300 leading-normal">{comment.text}</p>

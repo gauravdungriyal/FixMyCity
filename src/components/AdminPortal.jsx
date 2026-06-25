@@ -18,6 +18,40 @@ import { formatDistanceToNow } from "date-fns";
 import { updateIssueStatus, uploadIssueImage } from "../services/firebase";
 import { CIVIC_CATEGORIES } from "../services/gemini";
 
+// Safe date formatting utility to prevent RangeError crashes
+const safeFormatDistanceToNow = (dateVal) => {
+  if (!dateVal) return "unknown time";
+  try {
+    let dateObj;
+    if (typeof dateVal.toDate === "function") {
+      dateObj = dateVal.toDate();
+    } else if (dateVal instanceof Date) {
+      dateObj = dateVal;
+    } else if (typeof dateVal === "number") {
+      dateObj = new Date(dateVal);
+    } else if (typeof dateVal === "string") {
+      if (/^\d+$/.test(dateVal)) {
+        dateObj = new Date(parseInt(dateVal, 10));
+      } else {
+        dateObj = new Date(dateVal);
+      }
+    } else if (dateVal.seconds) {
+      dateObj = new Date(dateVal.seconds * 1000);
+    } else {
+      dateObj = new Date(dateVal);
+    }
+    
+    if (isNaN(dateObj.getTime())) {
+      return "some time ago";
+    }
+    
+    return formatDistanceToNow(dateObj, { addSuffix: true });
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return "some time ago";
+  }
+};
+
 export default function AdminPortal({ 
   issues, 
   onLogOut,
@@ -240,7 +274,7 @@ export default function AdminPortal({
                             {issue.status}
                           </span>
                           <span className="text-[9px] text-zinc-500">
-                            {formatDistanceToNow(issue.createdAt, { addSuffix: true })}
+                            {safeFormatDistanceToNow(issue.createdAt)}
                           </span>
                         </div>
                         <h4 className="text-xs font-bold truncate text-white">{issue.category}</h4>
