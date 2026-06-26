@@ -219,7 +219,19 @@ export default function CitizenPortal({
   useEffect(() => {
     if (firebaseInitialized) {
       const unsubscribe = subscribeToLeaderboard((updatedLeaderboard) => {
-        setLeaderboard(updatedLeaderboard);
+        // Deduplicate users by name (case-insensitive), keeping the one with higher XP
+        const uniqueMap = new Map();
+        updatedLeaderboard.forEach(user => {
+          const name = user.name || "Anonymous Citizen";
+          const key = name.toLowerCase().trim();
+          const existing = uniqueMap.get(key);
+          if (!existing || (user.xp || 0) > (existing.xp || 0)) {
+            uniqueMap.set(key, user);
+          }
+        });
+        const deduplicated = Array.from(uniqueMap.values())
+          .sort((a, b) => (b.xp || 0) - (a.xp || 0));
+        setLeaderboard(deduplicated);
       });
       return () => unsubscribe();
     }
@@ -854,7 +866,7 @@ export default function CitizenPortal({
                 </div>
               ) : (
                 leaderboard.map((item, idx) => {
-                  const isSelf = item.userId === userId;
+                  const isSelf = item.userId === userId || (item.name && item.name === userProfile?.name);
                   const badgeName = item.badge || (
                     item.xp >= 1000 ? "Grand Guardian" :
                     item.xp >= 500 ? "Local Legend" :
